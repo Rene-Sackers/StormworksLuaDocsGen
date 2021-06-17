@@ -2,18 +2,20 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
 using System.Text;
+using System.Threading.Tasks;
 using OfficeOpenXml;
 
 namespace StormworksLuaDocsGen
 {
-	static class StringExtensions
+	public static class StringExtensions
 	{
 		public static string RemoveNewlines(this string original)
 			=> original.Replace("\r\n", " ").Replace("\r", " ").Replace("\n", " ");
 	}
 	
-	class Function
+	public class Function
 	{
 		public string Name { get; set; }
 		
@@ -21,10 +23,10 @@ namespace StormworksLuaDocsGen
 
 		public List<Parameter> Parameters { get; set; } = new();
 
-		public List<Parameter> ReturnData { get; set; } = new();
+		public List<Parameter> ReturnParameters { get; set; } = new();
 	}
 
-	class Parameter
+	public class Parameter
 	{
 		public string Name { get; set; }
 		
@@ -35,69 +37,200 @@ namespace StormworksLuaDocsGen
 		public bool IsOptional { get; set; }
 	}
 	
-	class Program
+	public class Program
 	{
-		static void Main(string[] args)
+		private const string DocsGoogleSheetUrl = "https://docs.google.com/spreadsheets/d/1DkjUjX6DwCBt8IhA43NoYhtxk42_f6JXb-dfxOX9lgg/";
+		private const string DocsGoogleSheetExportUrl = "https://docs.google.com/spreadsheets/d/1DkjUjX6DwCBt8IhA43NoYhtxk42_f6JXb-dfxOX9lgg/export?format=xlsx"; 
+		
+		public static async Task Main(string[] args)
 		{
-			var docsPath = Path.Combine(AppContext.BaseDirectory, "Files\\Docs.xlsx");
-			var outputPath = Path.Combine(AppContext.BaseDirectory, "Files\\docs.lua");
-			
-			ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
-			using var package = new ExcelPackage(new FileInfo(docsPath));
-			var sheet1 = package.Workbook.Worksheets["Sheet1"];
+			try
+			{
+				await Run();
+			}
+			catch (Exception e)
+			{
+				Console.WriteLine(e);
+			}
 
+			if (!Environment.UserInteractive)
+				return;
+			
+			Console.WriteLine("Press any key to exit.");
+			Console.ReadKey();
+		}
+
+		private static async Task Run()
+		{
+			Console.WriteLine("Stormworks Lua docs generator");
+			
+			var inputPath = Path.Combine(AppContext.BaseDirectory, "docs.xlsx");
+			var outputPath = Path.Combine(AppContext.BaseDirectory, "docs.lua");
+			
+			await DownloadDocsExcelExport(inputPath);
+
+			ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
+			using var package = new ExcelPackage(new FileInfo(inputPath));
+			
+			var functionDescriptionsSheet = package.Workbook.Worksheets["Function Descriptions"];
+			if (functionDescriptionsSheet == null)
+			{
+				Console.WriteLine("No \"Function Descriptions\" worksheet in Excel file");
+				return;
+			}
+
+			Console.WriteLine("Extracting functions");
+			
+			var functions = ExtractFunctions(functionDescriptionsSheet);
+
+			var docsStringBuilder = GenerateDocs(functions);
+
+			Console.WriteLine($"Writing to {outputPath}");
+			await File.WriteAllTextAsync(outputPath, docsStringBuilder.ToString());
+			Console.WriteLine("Done");
+		}
+
+		private static async Task DownloadDocsExcelExport(string path)
+		{
+			if (File.Exists(path) && DateTime.Now - new FileInfo(path).CreationTime <= TimeSpan.FromHours(1))
+			{
+				Console.WriteLine("Skipping download, existing file is < 1 hour old");
+				return;
+			}
+			
+			Console.WriteLine($"Downloading {DocsGoogleSheetExportUrl} to {path}");
+			
+			using var httpClient = new HttpClient();
+
+			var downloadStream = await httpClient.GetStreamAsync(DocsGoogleSheetExportUrl);
+			await using var destinationFileSteam = File.Open(path, FileMode.Create);
+			await downloadStream.CopyToAsync(destinationFileSteam);
+
+			Console.WriteLine($"Downloaded file. Bytes: {destinationFileSteam.Length}");
+			await downloadStream.FlushAsync();
+			await destinationFileSteam.FlushAsync();
+			destinationFileSteam.Close();
+			await destinationFileSteam.DisposeAsync();
+		}
+
+		private static List<Function> ExtractFunctions(ExcelWorksheet functionDescriptionsSheet)
+		{
 			var functions = new List<Function>();
 			Function function = null;
-			for (var row = sheet1.Dimension.Start.Row; row <= sheet1.Dimension.End.Row; row++)
+			for (var row = functionDescriptionsSheet.Dimension.Start.Row + 1; row <= functionDescriptionsSheet.Dimension.End.Row; row++)
 			{
-				var cell1 = sheet1.Cells[row, 1].Text;
-				if (!string.IsNullOrWhiteSpace(cell1))
+				var functionName = functionDescriptionsSheet.Cells[row, 2].Text;
+				if (!string.IsNullOrWhiteSpace(functionName))
 				{
+					Console.WriteLine();
+
 					if (function != null)
 						functions.Add(function);
-					
+
 					function = new()
 					{
-						Name = cell1,
-						Description = sheet1.Cells[row, 2].Text
+						Name = functionName,
+						Description = functionDescriptionsSheet.Cells[row, 3].Text
 					};
+
+					Console.WriteLine($"Found function {functionName}");
 				}
-				
+
 				if (function == null)
 					continue;
 
-				var parameterName = sheet1.Cells[row, 4].Text;
-				if (string.IsNullOrWhiteSpace(parameterName))
-					continue;
-
-				if (parameterName.Contains(" "))
-					parameterName = "arg" + (function.Parameters.Count + 1);
-				
-				var isOptional = sheet1.Cells[row, 3].Text.ToLowerInvariant() == "true";
-				var parameterType = sheet1.Cells[row, 5].Text;
-				var parameterDescription = sheet1.Cells[row, 6].Text;
-				
-				function.Parameters.Add(new()
-				{
-					IsOptional = isOptional,
-					Name = parameterName,
-					Type = parameterType.Replace("bool", "boolean"),
-					Description = parameterDescription
-				});
+				ParseParameter(functionDescriptionsSheet, row, function);
+				ParseReturnParameter(functionDescriptionsSheet, row, function);
 			}
 
+			return functions;
+		}
+
+		private static void ParseParameter(ExcelWorksheet functionDescriptionsSheet, int row, Function function)
+		{
+			var parameterName = functionDescriptionsSheet.Cells[row, 5].Text;
+			if (string.IsNullOrWhiteSpace(parameterName))
+				return;
+
+			Console.WriteLine($"\tFound parameter {parameterName}");
+
+			if (parameterName.Contains(" "))
+			{
+				Console.WriteLine($"\tFound invalid parameter name: {parameterName} on row {row}");
+				parameterName = "arg" + (function.Parameters.Count + 1);
+			}
+
+			var isOptional = functionDescriptionsSheet.Cells[row, 4].Text.ToLowerInvariant() == "true";
+			var parameterType = functionDescriptionsSheet.Cells[row, 6].Text;
+			var parameterDescription = functionDescriptionsSheet.Cells[row, 7].Text;
+
+			function.Parameters.Add(new()
+			{
+				IsOptional = isOptional,
+				Name = parameterName,
+				Type = MapType(parameterType),
+				Description = parameterDescription
+			});
+		}
+
+		private static void ParseReturnParameter(ExcelWorksheet functionDescriptionsSheet, int row, Function function)
+		{
+			var returnParameterName = functionDescriptionsSheet.Cells[row, 8].Text;
+			if (string.IsNullOrWhiteSpace(returnParameterName))
+				return;
+
+			Console.WriteLine($"\tFound return parameter {returnParameterName}");
+
+			if (returnParameterName.Contains(" "))
+			{
+				Console.WriteLine($"\tFound invalid parameter name: {returnParameterName} on row {row}");
+				returnParameterName = "arg" + (function.Parameters.Count + 1);
+			}
+
+			var parameterType = functionDescriptionsSheet.Cells[row, 9].Text;
+			var parameterDescription = functionDescriptionsSheet.Cells[row, 10].Text;
+
+			function.ReturnParameters.Add(new()
+			{
+				Name = returnParameterName,
+				Type = MapType(parameterType),
+				Description = parameterDescription
+			});
+		}
+
+		private static string MapType(string type)
+		{
+			return type.Replace("bool", "boolean");
+		}
+
+		private static StringBuilder GenerateDocs(IEnumerable<Function> functions)
+		{
+			Console.WriteLine("Generating docs");
+
 			var stringBuilder = new StringBuilder();
-			stringBuilder.AppendLine("---@diagnostic disable: lowercase-global");
+			stringBuilder.AppendLine("-- Auto generated docs by StormworksLuaDocsGen (https://github.com/Rene-Sackers/StormworksLuaDocsGen)");
+			stringBuilder.AppendLine($"-- Notice issues/missing info? Please contribute here: {DocsGoogleSheetUrl}, then create an issue on the GitHub");
+			stringBuilder.AppendLine();
+			stringBuilder.AppendLine("--- @diagnostic disable: lowercase-global");
+			stringBuilder.AppendLine();
 			stringBuilder.AppendLine("server = {}");
 			stringBuilder.AppendLine("matrix = {}");
-			stringBuilder.AppendLine("");
-			
+			stringBuilder.AppendLine();
+
 			foreach (var docFunction in functions)
 			{
+				Console.WriteLine($"Writing function {docFunction.Name}");
+
 				stringBuilder.AppendLine($"--- {docFunction.Description.RemoveNewlines()}");
 				foreach (var parameter in docFunction.Parameters)
 				{
-					stringBuilder.AppendLine($"---@param {parameter.Name} {parameter.Type} {parameter.Description.RemoveNewlines()}");
+					stringBuilder.AppendLine($"--- @param {parameter.Name} {parameter.Type} {parameter.Description.RemoveNewlines()}");
+				}
+
+				if (docFunction.ReturnParameters.Any())
+				{
+					var returnParameterTypes = string.Join(", ", docFunction.ReturnParameters.Select(rp => $"{rp.Type} {rp.Name}"));
+					stringBuilder.AppendLine($"--- @return {returnParameterTypes}");
 				}
 
 				var functionParameters = string.Join(", ", docFunction.Parameters.Select(p => p.Name));
@@ -105,8 +238,7 @@ namespace StormworksLuaDocsGen
 				stringBuilder.AppendLine();
 			}
 
-			File.WriteAllText(outputPath, stringBuilder.ToString());
-			Console.WriteLine("Done");
+			return stringBuilder;
 		}
 	}
 }

@@ -10,15 +10,4 @@
       <PackageReference Include="EPPlus" Version="5.6.3" />
     </ItemGroup>
 
-    <ItemGroup>
-      <Folder Include="Files" />
-    </ItemGroup>
-
-    <ItemGroup>
-      <None Remove="Files\Docs.xlsx" />
-      <Content Include="Files\Docs.xlsx">
-        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-      </Content>
-    </ItemGroup>
-
 </Project>
