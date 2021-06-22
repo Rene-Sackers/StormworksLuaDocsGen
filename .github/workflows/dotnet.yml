@@ -1,0 +1,44 @@
+name: Publish docs
+
+on:
+  push:
+    tags:
+      - 'v*.*'
+      
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v2
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v1
+      with:
+        dotnet-version: 5.0.x
+
+    - uses: actions/cache@v2
+      id: nuget
+      with:
+        path: |
+          ~/.nuget/packages
+          src/StormworksLuaDocsGen/**/obj/**
+        key: nuget-${{ hashFiles('**/*.csproj') }}
+        restore-keys: nuget
+
+    - name: Restore with dotnet
+      if: steps.nuget.outputs.cache-hit != 'true'
+      run: dotnet restore ./src/StormworksLuaDocsGen
+      
+    - name: Build
+      run: dotnet build ./src/StormworksLuaDocsGen/StormworksLuaDocsGen.csproj -o ./Build --no-restore
+      
+    - name: Generate docs
+      run: dotnet ./Build/StormworksLuaDocsGen.dll
+
+    - name: Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: ./Build/docs.lua
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
