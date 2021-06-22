@@ -52,12 +52,6 @@ namespace StormworksLuaDocsGen
 			{
 				Console.WriteLine(e);
 			}
-
-			if (!Environment.UserInteractive)
-				return;
-			
-			Console.WriteLine("Press any key to exit.");
-			Console.ReadKey();
 		}
 
 		private static async Task Run()
