@@ -154,9 +154,12 @@ namespace StormworksLuaDocsGen
 				parameterName = "arg" + (function.Parameters.Count + 1);
 			}
 
-			var isOptional = functionDescriptionsSheet.Cells[row, 4].Text.ToLowerInvariant() == "true";
+			var isOptional = functionDescriptionsSheet.Cells[row, 4].Text.ToLowerInvariant() == "1";
 			var parameterType = functionDescriptionsSheet.Cells[row, 6].Text;
-			var parameterDescription = functionDescriptionsSheet.Cells[row, 7].Text;
+
+			var descriptionCell = functionDescriptionsSheet.Cells[row, 7];
+			var translatedHyperlink = TranslateHyperlink(descriptionCell);
+			var parameterDescription = descriptionCell.Text + (string.IsNullOrWhiteSpace(translatedHyperlink) ? null : $" {translatedHyperlink}");
 
 			function.Parameters.Add(new()
 			{
@@ -165,6 +168,17 @@ namespace StormworksLuaDocsGen
 				Type = MapType(parameterType),
 				Description = parameterDescription
 			});
+		}
+
+		private static string TranslateHyperlink(ExcelRange cell)
+		{
+			var descriptionHyperlink = cell.Hyperlink as ExcelHyperLink;
+			if (descriptionHyperlink == null)
+				return null;
+
+			return !string.IsNullOrWhiteSpace(descriptionHyperlink.ReferenceAddress) ?
+				$"(Refer to cells \"{descriptionHyperlink.ReferenceAddress}\" on {DocsGoogleSheetUrl})"
+				: descriptionHyperlink.AbsoluteUri;
 		}
 
 		private static void ParseReturnParameter(ExcelWorksheet functionDescriptionsSheet, int row, Function function)
@@ -203,7 +217,8 @@ namespace StormworksLuaDocsGen
 
 			var stringBuilder = new StringBuilder();
 			stringBuilder.AppendLine("-- Auto generated docs by StormworksLuaDocsGen (https://github.com/Rene-Sackers/StormworksLuaDocsGen)");
-			stringBuilder.AppendLine($"-- Notice issues/missing info? Please contribute here: {DocsGoogleSheetUrl}, then create an issue on the GitHub");
+			stringBuilder.AppendLine($"-- Based on data in: {DocsGoogleSheetUrl}");
+			stringBuilder.AppendLine($"-- Notice issues/missing info? Please contribute here: {DocsGoogleSheetUrl}, then create an issue on the GitHub repo");
 			stringBuilder.AppendLine();
 			stringBuilder.AppendLine("--- @diagnostic disable: lowercase-global");
 			stringBuilder.AppendLine();
@@ -218,7 +233,8 @@ namespace StormworksLuaDocsGen
 				stringBuilder.AppendLine($"--- {docFunction.Description.RemoveNewlines()}");
 				foreach (var parameter in docFunction.Parameters)
 				{
-					stringBuilder.AppendLine($"--- @param {parameter.Name} {parameter.Type} {parameter.Description.RemoveNewlines()}");
+					var type = parameter.IsOptional ? $"{parameter.Type}|nil" : parameter.Type;
+					stringBuilder.AppendLine($"--- @param {parameter.Name} {type} {parameter.Description.RemoveNewlines()}");
 				}
 
 				if (docFunction.ReturnParameters.Any())
