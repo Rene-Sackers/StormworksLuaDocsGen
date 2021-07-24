@@ -86,7 +86,7 @@ namespace StormworksLuaDocsGen
 
 		private static async Task DownloadDocsExcelExport(string path)
 		{
-			if (File.Exists(path) && DateTime.Now - new FileInfo(path).CreationTime <= TimeSpan.FromHours(1))
+			if (File.Exists(path) && DateTime.Now - new FileInfo(path).LastWriteTime <= TimeSpan.FromHours(1))
 			{
 				Console.WriteLine("Skipping download, existing file is < 1 hour old");
 				return;
@@ -136,6 +136,9 @@ namespace StormworksLuaDocsGen
 				ParseParameter(functionDescriptionsSheet, row, function);
 				ParseReturnParameter(functionDescriptionsSheet, row, function);
 			}
+			
+			// Add last function
+			functions.Add(function);
 
 			return functions;
 		}
