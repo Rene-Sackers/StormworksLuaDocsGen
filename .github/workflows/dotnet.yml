@@ -33,12 +33,17 @@ jobs:
     - name: Build
       run: dotnet build ./src/StormworksLuaDocsGen/StormworksLuaDocsGen.csproj -o ./Build --no-restore
       
-    - name: Generate docs
-      run: dotnet ./Build/StormworksLuaDocsGen.dll
+    - name: Generate mission docs
+      run: dotnet ./Build/StormworksLuaDocsGen.dll --output docs-missions.lua --docs-url https://docs.google.com/spreadsheets/d/1DkjUjX6DwCBt8IhA43NoYhtxk42_f6JXb-dfxOX9lgg
+      
+    - name: Generate vehicle docs
+      run: dotnet ./Build/StormworksLuaDocsGen.dll --output docs-vehicles.lua --docs-url https://docs.google.com/spreadsheets/d/1tCvYSzxnr5lWduKlePKg4FerpeKHbKTmwmAxlnjZ_Go
 
     - name: Release
       uses: softprops/action-gh-release@v1
       with:
-        files: ./Build/docs.lua
+        files: |
+          ./Build/docs-missions.lua
+          ./Build/docs-vehicles.lua
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
