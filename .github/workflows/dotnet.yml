@@ -43,7 +43,7 @@ jobs:
       uses: softprops/action-gh-release@v1
       with:
         files: |
-          ./Build/docs-missions.lua
-          ./Build/docs-vehicles.lua
+          docs-missions.lua
+          docs-vehicles.lua
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
