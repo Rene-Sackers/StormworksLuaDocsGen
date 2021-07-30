@@ -12,9 +12,9 @@ Latest files can be found [here](https://github.com/Rene-Sackers/StormworksLuaDo
 
 Made for [Visual Studio](https://code.visualstudio.com/) code with the [Lua extension](https://marketplace.visualstudio.com/items?itemName=sumneko.lua).
 
-When editing a mission, open the mission's directory with VS Code via File -> Open Folder...  
-Drop the [docs.lua from releases](https://github.com/Rene-Sackers/StormworksLuaDocsGen/releases/latest) file in the same directory as `script.lua`, and viola!
+When editing a mission (or extracted vehicle Lua) script, open the mission's directory with VS Code via File -> Open Folder...  
+Drop the docs-missions.lua or docs-vehicles.lua from [the latest release](https://github.com/Rene-Sackers/StormworksLuaDocsGen/releases/latest) file in the same directory as the script you're working on, and viola!
 
 ![Screenshot](readme/screenshot.png)
 
-I recommend using the documentation files in combination with [Stormworks Lua Extract](https://github.com/Rene-Sackers/StormworksLuaExtract), in order to be able to write vehicle Lua in VS code with full intellisense support.
+If you're working with vehicle Lua, I recommend using [Stormworks Lua Extract](https://github.com/Rene-Sackers/StormworksLuaExtract). It will read and write the Lua in your vehicles directly to your disk as .lua files, allowing you to edit them in VS code, and simply reload the vehicle in the editor to get your latest changes.
