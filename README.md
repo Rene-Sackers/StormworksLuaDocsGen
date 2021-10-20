@@ -4,7 +4,7 @@ This tool generates .lua files based on an existing Google docs spreadsheet in o
 
 Generated based on data from
 * Vehicles Lua: https://docs.google.com/spreadsheets/d/1tCvYSzxnr5lWduKlePKg4FerpeKHbKTmwmAxlnjZ_Go/
-* Mission Lua: https://docs.google.com/spreadsheets/d/1DkjUjX6DwCBt8IhA43NoYhtxk42_f6JXb-dfxOX9lgg/
+* Mission Lua: https://docs.google.com/spreadsheets/d/1joiH8eu6LOE76lL0ijNoUe-3VsVDfMkAnfHY-trCt9Y/
 
 Latest files can be found [here](https://github.com/Rene-Sackers/StormworksLuaDocsGen/releases/latest).
 
