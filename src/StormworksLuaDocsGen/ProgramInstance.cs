@@ -9,6 +9,18 @@ using OfficeOpenXml;
 
 namespace StormworksLuaDocsGen
 {
+	public class TypeDefinition
+	{
+		public string Name { get; }
+
+		public List<(string fieldName, string type, string description)> Fields { get; } = new();
+
+		public TypeDefinition(string name)
+		{
+			Name = name;
+		}
+	}
+	
 	public class ProgramInstance
 	{
 		private const string GoogleSheetExportToXlsxSuffix = "/export?format=xlsx";
@@ -37,12 +49,18 @@ namespace StormworksLuaDocsGen
 				Console.WriteLine("No \"Function Descriptions\" worksheet in Excel file");
 				return;
 			}
+			
+			var returnTypesSheet = package.Workbook.Worksheets["Return Types"];
+			List<TypeDefinition> typeDefinitions = new(0);
+			if (returnTypesSheet == null)
+				Console.WriteLine("No \"Return Types\" worksheet in Excel file");
+			else
+				typeDefinitions = ExtractTypeDefinitions(returnTypesSheet).ToList();
 
 			Console.WriteLine("Extracting functions");
-
 			var functions = ExtractFunctions(functionDescriptionsSheet);
 
-			var docsStringBuilder = GenerateDocs(functions);
+			var docsStringBuilder = GenerateDocs(typeDefinitions, functions);
 
 			Console.WriteLine($"Writing to {_outputFilePath.FullName}");
 			await File.WriteAllTextAsync(_outputFilePath.FullName, docsStringBuilder.ToString());
@@ -65,6 +83,43 @@ namespace StormworksLuaDocsGen
 			await destinationFileSteam.FlushAsync();
 			destinationFileSteam.Close();
 			await destinationFileSteam.DisposeAsync();
+		}
+
+		private static IEnumerable<TypeDefinition> ExtractTypeDefinitions(ExcelWorksheet typeDefinitionsSheet)
+		{
+			Console.WriteLine("Extracting types");
+			for (var row = typeDefinitionsSheet.Dimension.Start.Row; row <= typeDefinitionsSheet.Dimension.End.Row; row++)
+			{
+				var typeName = typeDefinitionsSheet.Cells[row, 1].Text;
+				if (string.IsNullOrWhiteSpace(typeName))
+					break;
+				
+				Console.WriteLine("Type: " + typeName);
+
+				typeName = typeName.Replace(" ", null);
+				var definition = new TypeDefinition(typeName);
+				row += 2; // Skip Field/Type/Description headers
+
+				do
+				{
+					var fieldName = typeDefinitionsSheet.Cells[row, 1].Text;
+					if (string.IsNullOrWhiteSpace(fieldName))
+						break;
+					
+					var fieldType = typeDefinitionsSheet.Cells[row, 2].Text;
+					var fieldDescription = typeDefinitionsSheet.Cells[row, 3].Text;
+
+					var fieldIsIndex = int.TryParse(fieldName, out _);
+					if (fieldIsIndex)
+						fieldName = $"[{fieldName}]";
+					
+					definition.Fields.Add((fieldName, fieldType, fieldDescription));
+					Console.WriteLine($"\t{ fieldName} {fieldType} - {fieldDescription}");
+					row++;
+				} while (true);
+
+				yield return definition;
+			}
 		}
 
 		private List<Function> ExtractFunctions(ExcelWorksheet functionDescriptionsSheet)
@@ -174,7 +229,7 @@ namespace StormworksLuaDocsGen
 			return type.Replace("bool", "boolean");
 		}
 
-		private StringBuilder GenerateDocs(ICollection<Function> functions)
+		private StringBuilder GenerateDocs(List<TypeDefinition> typeDefinitions, ICollection<Function> functions)
 		{
 			Console.WriteLine("Generating docs");
 
@@ -192,6 +247,18 @@ namespace StormworksLuaDocsGen
 				.ToList()
 				.ForEach(f => stringBuilder.AppendLine($"{f} = {{}}"));
 			stringBuilder.AppendLine();
+
+			foreach (var typeDefinition in typeDefinitions)
+			{
+				Console.WriteLine($"Writing type {typeDefinition.Name}");
+				stringBuilder.AppendLine($"--- @class {typeDefinition.Name}");
+
+				foreach (var field in typeDefinition.Fields)
+				{
+					stringBuilder.AppendLine($"--- @field {field.fieldName} {MapType(field.type)} {field.description}");
+				}
+				stringBuilder.AppendLine();
+			}
 
 			foreach (var docFunction in functions)
 			{
