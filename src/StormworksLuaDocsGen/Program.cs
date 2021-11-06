@@ -28,7 +28,8 @@ namespace StormworksLuaDocsGen
 			
 			rootCommand.Handler = CommandHandler.Create<string, FileInfo>(async (docsUrl, output) =>
 			{
-				await new ProgramInstance(docsUrl, output).Run();
+				using var instance = new ProgramInstance(docsUrl, output);
+				await instance.Run();
 			});
 			
 			try

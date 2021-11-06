@@ -21,12 +21,14 @@ namespace StormworksLuaDocsGen
 		}
 	}
 	
-	public class ProgramInstance
+	public class ProgramInstance : IDisposable
 	{
 		private const string GoogleSheetExportToXlsxSuffix = "/export?format=xlsx";
 		
 		private readonly string _docsUrl;
 		private readonly FileInfo _outputFilePath;
+
+		private ExcelPackage _currentPackage;
 
 		public ProgramInstance(string docsUrl, FileInfo outputFilePath)
 		{
@@ -41,16 +43,16 @@ namespace StormworksLuaDocsGen
 			await DownloadDocsExcelExport(excelExportFilePath);
 
 			ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
-			using var package = new ExcelPackage(new FileInfo(excelExportFilePath));
+			_currentPackage = new ExcelPackage(new FileInfo(excelExportFilePath));
 
-			var functionDescriptionsSheet = package.Workbook.Worksheets["Function Descriptions"];
+			var functionDescriptionsSheet = _currentPackage.Workbook.Worksheets["Function Descriptions"];
 			if (functionDescriptionsSheet == null)
 			{
 				Console.WriteLine("No \"Function Descriptions\" worksheet in Excel file");
 				return;
 			}
 			
-			var returnTypesSheet = package.Workbook.Worksheets["Return Types"];
+			var returnTypesSheet = _currentPackage.Workbook.Worksheets["Return Types"];
 			List<TypeDefinition> typeDefinitions = new(0);
 			if (returnTypesSheet == null)
 				Console.WriteLine("No \"Return Types\" worksheet in Excel file");
@@ -194,9 +196,11 @@ namespace StormworksLuaDocsGen
 			if (descriptionHyperlink == null)
 				return null;
 
-			return !string.IsNullOrWhiteSpace(descriptionHyperlink.ReferenceAddress)
-				? $"(Refer to cells \"{descriptionHyperlink.ReferenceAddress}\" on {_docsUrl})"
-				: descriptionHyperlink.AbsoluteUri;
+			if (string.IsNullOrWhiteSpace(descriptionHyperlink.ReferenceAddress) || !_currentPackage.Workbook.Names.ContainsKey(descriptionHyperlink.ReferenceAddress))
+				return descriptionHyperlink.AbsoluteUri;
+
+			var referredCell = _currentPackage.Workbook.Names[descriptionHyperlink.ReferenceAddress].Address.Replace("!", ": ").Replace("$", null);
+			return $"(Refer to {referredCell} on {_docsUrl})";
 		}
 
 		private static void ParseReturnParameter(ExcelWorksheet functionDescriptionsSheet, int row, Function function)
@@ -283,6 +287,11 @@ namespace StormworksLuaDocsGen
 			}
 
 			return stringBuilder;
+		}
+
+		public void Dispose()
+		{
+			_currentPackage?.Dispose();
 		}
 	}
 }
